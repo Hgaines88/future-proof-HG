@@ -36,7 +36,13 @@ def setup(show_status=True):
     notes_dir = Path.home() / ".notes"
 
     if show_status:
-        print("Future Proof Notes Manager v0.0")
+        print("""
+        NoteGoat v002 presented by H.Gaines
+        for ZipCode Data Cohort 2026.2:
+        Plain UTF-8 Markdown in a folder you own.
+        Notes that outlive the app that wrote them. 
+        Any editor, any machine, any decade.
+        """)
         print("=" * 40)
 
         if not notes_dir.exists():
