@@ -37,11 +37,12 @@ def setup(show_status=True):
 
     if show_status:
         print("""
-        NoteGoat v002 presented by (H)Gaines
-        for ZipCode Data Cohort 2026.2:
-        Plain UTF-8 Markdown in a folder you own.
-        Notes that outlive the app that wrote them. 
-        Any editor, any machine, any decade.
+NoteGoat v0.0.2 · presented by (H) Gaines
+
+Notes that outlive the app that wrote them.
+Any editor. Any machine. Any decade.
+
+Zip Code Wilmington :: Data Cohort 2026.2
         """)
         print("=" * 40)
 
