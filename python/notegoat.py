@@ -37,7 +37,7 @@ def setup(show_status=True):
 
     if show_status:
         print("""
-        NoteGoat v002 presented by H.Gaines
+        NoteGoat v002 presented by (H)Gaines
         for ZipCode Data Cohort 2026.2:
         Plain UTF-8 Markdown in a folder you own.
         Notes that outlive the app that wrote them. 
