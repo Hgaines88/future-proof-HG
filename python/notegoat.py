@@ -37,12 +37,12 @@ def setup(show_status=True):
 
     if show_status:
         print("""
-NoteGoat v0.0.2 · presented by (H) Gaines
+NoteGoat v0.0.2 · instantiated by (h)gaines.
 
 Notes that outlive the app that wrote them.
-Any editor. Any machine. Any decade.
+// Any editor · Any machine · Any decade
 
-Zip Code Wilmington :: Data Cohort 2026.2
+Zip Code Wilmington :: Data Cohort 7.2 · 2026
         """)
         print("=" * 40)
 
