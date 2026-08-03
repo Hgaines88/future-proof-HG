@@ -239,9 +239,43 @@ def format_note_line(note_path):
     ...
     return f"{title} — {created} — Tags: {tags_text}"
 
-def list_notes(notes_dir):
-    """List note files and their titles."""
-    note_files = find_note_files(notes_dir)
+def get_all_tags(notes_dir):
+    """Return every tag in use, deduplicated and sorted. Corrupt notes are skipped."""
+    tags = set()
+
+    for note_file in find_note_files(notes_dir):
+        try:
+            metadata = parse_yaml_header(note_file)
+        except NOTE_READ_ERRORS:
+            continue
+
+        tags.update(metadata.get("tags", []))
+
+    return sorted(tags, key=str.casefold)
+
+
+def filter_notes_by_tag(notes_dir, tag):
+    """Return note files carrying the given tag, matched case-insensitively."""
+    wanted = tag.casefold()
+    matches = []
+
+    for note_file in find_note_files(notes_dir):
+        try:
+            metadata = parse_yaml_header(note_file)
+        except NOTE_READ_ERRORS:
+            continue
+
+        if any(str(each).casefold() == wanted for each in metadata.get("tags", [])):
+            matches.append(note_file)
+
+    return matches
+
+def list_notes(notes_dir, tag=None):
+    """List notes, optionally filtering them by tag."""
+    if tag:
+        note_files = filter_notes_by_tag(notes_dir, tag)
+    else:
+        note_files = find_note_files(notes_dir)
 
     if not note_files:
         print("No notes found.", file=sys.stderr)
@@ -576,7 +610,10 @@ def build_parser():
 
     subparsers = parser.add_subparsers(dest="command")
 
-    subparsers.add_parser("list", help="List notes")
+    list_parser = subparsers.add_parser("list", help="List notes")
+    list_parser.add_argument("--tag", help="Only notes carrying this tag")
+
+    subparsers.add_parser("tags", help="List every tag in use")
     subparsers.add_parser("help", help="Show command-line help")
 
     search_parser = subparsers.add_parser("search", help="Search notes")
@@ -621,10 +658,19 @@ def main():
     exit_code = 0
 
     if args.command == "list":
-        _, had_errors = list_notes(notes_dir)
+        _, had_errors = list_notes(notes_dir, tag=args.tag)
 
         if had_errors:
             exit_code = 1
+
+    elif args.command == "tags":
+        tags = get_all_tags(notes_dir)
+
+        if not tags:
+            print("No tags found.")
+        else:
+            for tag in tags:
+                print(tag)
 
     elif args.command == "help":
         parser.print_help()
