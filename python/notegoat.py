@@ -668,8 +668,8 @@ class NotesArgumentParser(argparse.ArgumentParser):
 def build_parser():
     """Create the command-line parser for non-interactive use."""
     parser = NotesArgumentParser(
-        prog="notes",
-        description="Future Proof Notes Manager"
+        prog="NoteGoat",
+        description="Plain UTF-8 Markdown in a folder you own"
     )
 
     subparsers = parser.add_subparsers(dest="command")
