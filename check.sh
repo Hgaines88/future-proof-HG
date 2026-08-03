@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# check.sh — smoke test for the core-extraction refactor.
+# check.sh — full test run: the pytest unit suite, then end-to-end smoke tests.
 #
 # Not a test suite. It catches the five specific regressions the refactor is
 # meant to fix, so you can run it after each step and know you have not broken
@@ -12,13 +12,16 @@
 
 set -u
 
-APP="${APP:-python/notes-shell.py}"
+APP="${APP:-python/notegoat.py}"
+PYTEST="${PYTEST:-python3 -m pytest}"
 SANDBOX=/tmp/notes-check-home
 PASS=0
 FAIL=0
+SKIP=0
 
 # --------------------------------------------------------------- helpers ----
 ok()   { PASS=$((PASS+1)); printf '  \033[32mPASS\033[0m  %s\n' "$1"; }
+skip() { SKIP=$((SKIP+1)); printf '  \033[33mSKIP\033[0m  %s\n' "$1"; }
 bad()  { FAIL=$((FAIL+1)); printf '  \033[31mFAIL\033[0m  %s\n' "$1"; [ $# -gt 1 ] && printf '        %s\n' "$2"; }
 run()  { HOME="$SANDBOX" python3 "$APP" "$@"; }
 
@@ -32,7 +35,22 @@ echo
 echo "Checking $APP against $SANDBOX"
 echo
 
+# ------------------------------------------------- 0. unit tests ------------
+# The pytest suite runs first: it is faster and more precise, so a broken core
+# surfaces before the slower end-to-end checks below.
+echo "0. Unit tests"
+if $PYTEST --version >/dev/null 2>&1; then
+  if pytest_output=$($PYTEST -q 2>&1); then
+    ok "pytest — $(printf '%s' "$pytest_output" | tail -1)"
+  else
+    bad "pytest suite failed" "$(printf '%s' "$pytest_output" | tail -15)"
+  fi
+else
+  skip "pytest not installed — run: pip3 install pytest"
+fi
+
 # ------------------------------------------------- 1. clean stdout ----------
+echo
 echo "1. CLI output is clean enough to pipe"
 out=$(run list 2>/dev/null)
 case "$out" in
@@ -257,6 +275,10 @@ fi
 # --------------------------------------------------------------- summary ----
 echo
 echo "-------------------------------------------"
-printf ' %d passed, %d failed\n' "$PASS" "$FAIL"
+if [ "$SKIP" -gt 0 ]; then
+  printf ' %d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
+else
+  printf ' %d passed, %d failed\n' "$PASS" "$FAIL"
+fi
 echo "-------------------------------------------"
 [ "$FAIL" -eq 0 ] || exit 1

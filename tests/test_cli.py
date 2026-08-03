@@ -1,0 +1,55 @@
+import subprocess
+import sys
+from pathlib import Path
+
+NOTEGOAT = Path(__file__).resolve().parent.parent / "python" / "notegoat.py"
+
+
+def run_cli(*args, stdin=""):
+    """Run notegoat as a real subprocess.
+
+    Inherits NOTEGOAT_HOME from the notes_home fixture, so the whole program
+    operates inside the temp directory.
+    """
+    return subprocess.run(
+        [sys.executable, str(NOTEGOAT), *args],
+        input=stdin,
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_list_on_empty_notes_exits_zero(notes_home):
+    result = run_cli("list")
+
+    assert result.returncode == 0
+    assert result.stdout == ""
+    assert "No notes found" in result.stderr
+
+def test_list_stdout_has_no_repl_chrome(notes_home):
+    run_cli("create", "A Note", stdin="body\n")
+    result = run_cli("list")
+
+    assert "Goodbye" not in result.stdout
+    assert "NoteGoat v" not in result.stdout
+
+
+def test_read_missing_note_exits_one(notes_home):
+    result = run_cli("read", "nope.md")
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert "not found" in result.stderr.lower()
+
+
+def test_search_with_no_match_exits_one(notes_home):
+    result = run_cli("search", "zzznomatch")
+
+    assert result.returncode == 1
+
+
+def test_create_from_a_pipe_writes_the_file(notes_home):
+    result = run_cli("create", "Piped Note", "--tags", "a,b", stdin="hello\n")
+
+    assert result.returncode == 0
+    assert (notes_home / "notes" / "piped-note.md").exists()

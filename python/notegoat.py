@@ -31,9 +31,24 @@ def filename_from_title(title, max_chars=80):
 
     return f"{cleaned[:max_chars]}.md"
 
+def get_notes_home():
+    """Return the notes directory.
+
+    Precedence:
+      1. $NOTEGOAT_HOME
+      2. $NOTES_HOME   (the name used in PossiblePlan)
+      3. ~/.notes
+    """
+    configured = os.environ.get("NOTEGOAT_HOME") or os.environ.get("NOTES_HOME")
+
+    if configured:
+        return Path(configured).expanduser()
+
+    return Path.home() / ".notes"
+
 def setup(show_status=True):
     """Initialize the notes application."""
-    notes_dir = Path.home() / ".notes"
+    notes_dir = get_notes_home()
 
     if show_status:
         print("""
@@ -217,7 +232,7 @@ def list_notes(notes_dir):
     note_files = find_note_files(notes_dir)
 
     if not note_files:
-        print("No notes found.")
+        print("No notes found.", file=sys.stderr)
         return [], False
 
     had_errors = False
