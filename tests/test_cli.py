@@ -4,6 +4,32 @@ from pathlib import Path
 
 NOTEGOAT = Path(__file__).resolve().parent.parent / "python" / "notegoat.py"
 
+def test_tags_command_lists_every_tag(notes_home):
+    run_cli("create", "Alpha Note", "--tags", "alpha, shared", stdin="x\n")
+    run_cli("create", "Beta Note", "--tags", "beta, shared", stdin="x\n")
+
+    result = run_cli("tags")
+
+    assert result.stdout == "alpha\nbeta\nshared\n"
+    assert result.returncode == 0
+
+
+def test_list_filters_by_tag(notes_home):
+    run_cli("create", "Alpha Note", "--tags", "alpha", stdin="x\n")
+    run_cli("create", "Beta Note", "--tags", "beta", stdin="x\n")
+
+    result = run_cli("list", "--tag", "alpha")
+
+    assert "Alpha Note" in result.stdout
+    assert "Beta Note" not in result.stdout
+
+
+def test_list_with_an_unknown_tag_exits_one(notes_home):
+    result = run_cli("list", "--tag", "nope")
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+
 def test_list_survives_a_corrupt_note(notes_home):
     notes = notes_home / "notes"
     notes.mkdir(parents=True, exist_ok=True)

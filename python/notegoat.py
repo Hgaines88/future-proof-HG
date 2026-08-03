@@ -15,6 +15,8 @@ import subprocess
 import argparse
 import unicodedata
 import json
+import getpass
+import uuid
 
 class NoteFormatError(Exception):
     """Raised when a note's YAML front matter cannot be parsed."""
@@ -658,16 +660,18 @@ def main():
     exit_code = 0
 
     if args.command == "list":
-        _, had_errors = list_notes(notes_dir, tag=args.tag)
+        note_files, had_errors = list_notes(notes_dir, tag=args.tag)
 
         if had_errors:
+            exit_code = 1
+        elif args.tag and not note_files:
             exit_code = 1
 
     elif args.command == "tags":
         tags = get_all_tags(notes_dir)
 
         if not tags:
-            print("No tags found.")
+            print("No tags found.", file=sys.stderr)
         else:
             for tag in tags:
                 print(tag)
