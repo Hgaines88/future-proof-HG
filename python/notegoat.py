@@ -39,6 +39,10 @@ def filename_from_title(title, max_chars=80):
 
     return f"{cleaned[:max_chars]}.md"
 
+def get_author():
+    """Return the note author: $NOTEGOAT_AUTHOR, else the OS username."""
+    return os.environ.get("NOTEGOAT_AUTHOR") or getpass.getuser()
+
 def get_notes_home():
     """Return the notes directory.
 
@@ -238,7 +242,7 @@ def format_note_line(note_path):
     created = metadata.get("created", "unknown date")
     tags = metadata.get("tags", [])
     tags_text = ", ".join(tags) if tags else "no tags"
-    ...
+
     return f"{title} — {created} — Tags: {tags_text}"
 
 def get_all_tags(notes_dir):
@@ -271,6 +275,42 @@ def filter_notes_by_tag(notes_dir, tag):
             matches.append(note_file)
 
     return matches
+
+def get_stats(notes_dir):
+    """Return counts describing the note library. Corrupt notes are counted, not read."""
+    note_files = find_note_files(notes_dir)
+    total_words = 0
+    readable = 0
+
+    for note_file in note_files:
+        try:
+            body = read_note_body(note_file)
+        except NOTE_READ_ERRORS:
+            continue
+
+        total_words += len(body.split())
+        readable += 1
+
+    return {
+        "notes": len(note_files),
+        "unreadable": len(note_files) - readable,
+        "tags": len(get_all_tags(notes_dir)),
+        "words": total_words,
+        "average_words": round(total_words / readable) if readable else 0,
+    }
+
+
+def print_stats(notes_dir):
+    """Print library statistics. Used by both interfaces."""
+    stats = get_stats(notes_dir)
+
+    print(f"Notes:          {stats['notes']}")
+    print(f"Tags:           {stats['tags']}")
+    print(f"Words:          {stats['words']}")
+    print(f"Average words:  {stats['average_words']}")
+
+    if stats["unreadable"]:
+        print(f"Unreadable:     {stats['unreadable']}", file=sys.stderr)
 
 def list_notes(notes_dir, tag=None):
     """List notes, optionally filtering them by tag."""
@@ -309,7 +349,7 @@ def read_note_body(note_path):
         if line.strip() == "---":
             return "".join(lines[index + 1:]).lstrip("\n")
 
-    return text
+    raise NoteFormatError(f"{note_path.name}: YAML header is never closed")
 
 def display_note(note_file, title):
     """Display a note's title and body."""
@@ -337,6 +377,8 @@ def show_help():
   edit   - Edit an existing note
   delete  - Delete a note
   search  - Search by title, content, tags or metadata
+  tags    - List every tag in use
+  stats   - Show library statistics
   quit    - Exit the application
 
     # NoteGoat v0.1.0
@@ -368,7 +410,7 @@ def delete_note(note_path):
     """Delete a note file. Raises OSError if it cannot be removed."""
     note_path.unlink()
 
-def create_note(notes_dir, title, content, tags=""):
+def create_note(notes_dir, title, content, tags="", author=None):
     """Create a note file and return its path."""
     filename = filename_from_title(title)
 
@@ -381,15 +423,20 @@ def create_note(notes_dir, title, content, tags=""):
         raise FileExistsError(f"A note named '{filename}' already exists.")
 
     title_value = json.dumps(title, ensure_ascii=False)
+    author_value = json.dumps(author or get_author(), ensure_ascii=False)
     tags_value = json.dumps(tags_from_input(tags), ensure_ascii=False)
-    created = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    note_id = uuid.uuid4()
     body = content.rstrip("\n")
 
     note_text = (
         f"---\n"
+        f"id: {note_id}\n"
         f"title: {title_value}\n"
+        f"author: {author_value}\n"
+        f"created: {now}\n"
+        f"modified: {now}\n"
         f"tags: {tags_value}\n"
-        f"created: {created}\n"
         f"---\n"
         f"\n"
         f"{body}\n"
@@ -553,6 +600,17 @@ def handle_delete(notes_dir):
     else:
         print(f"Deleted: {selected_title}")
 
+def handle_tags(notes_dir):
+    """Print every tag in use."""
+    all_tags = get_all_tags(notes_dir)
+
+    if not all_tags:
+        print("No tags found.", file=sys.stderr)
+        return
+
+    for tag in all_tags:
+        print(tag)
+
 def command_loop(notes_dir):
     """Main command loop for processing user input."""
     while True:
@@ -577,6 +635,10 @@ def command_loop(notes_dir):
                 handle_edit(notes_dir)
             elif command == "delete":
                 handle_delete(notes_dir)
+            elif command == "tags":
+                handle_tags(notes_dir)
+            elif command == "stats":
+                print_stats(notes_dir)
             elif command == "search":
                 handle_search(notes_dir)
             else:
@@ -616,6 +678,7 @@ def build_parser():
     list_parser.add_argument("--tag", help="Only notes carrying this tag")
 
     subparsers.add_parser("tags", help="List every tag in use")
+    subparsers.add_parser("stats", help="Show library statistics")
     subparsers.add_parser("help", help="Show command-line help")
 
     search_parser = subparsers.add_parser("search", help="Search notes")
@@ -626,6 +689,11 @@ def build_parser():
 
     create_parser = subparsers.add_parser("create", help="Create a note")
     create_parser.add_argument("title", help="Title for the new note")
+    create_parser.add_argument(
+        "--author",
+        default=None,
+        help="Override the note author"
+    )
     create_parser.add_argument(
         "--tags",
         default="",
@@ -676,6 +744,9 @@ def main():
             for tag in tags:
                 print(tag)
 
+    elif args.command == "stats":
+        print_stats(notes_dir)
+
     elif args.command == "help":
         parser.print_help()
 
@@ -716,7 +787,8 @@ def main():
                 notes_dir,
                 args.title,
                 content,
-                args.tags
+                args.tags,
+                args.author
             )
         except ValueError as error:
             print(error, file=sys.stderr)
