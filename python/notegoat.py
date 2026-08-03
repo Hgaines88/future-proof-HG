@@ -16,6 +16,12 @@ import argparse
 import unicodedata
 import json
 
+class NoteFormatError(Exception):
+    """Raised when a note's YAML front matter cannot be parsed."""
+
+
+# Everything that can go wrong while reading a note off disk.
+NOTE_READ_ERRORS = (OSError, UnicodeError, NoteFormatError)
 
 def filename_from_title(title, max_chars=80):
     """Convert a note title into a safe filename, preserving non-ASCII letters.
@@ -77,12 +83,14 @@ def parse_yaml_header(file_path):
         lines = file.readlines()
 
     metadata = {"title": file_path.name}
+    header_closed = False
 
     if not lines or lines[0].strip() != "---":
         return metadata
 
     for line in lines[1:]:
         if line.strip() == "---":
+            header_closed = True
             break
         if ":" in line:
             key, value = line.split(":", 1)
@@ -97,19 +105,14 @@ def parse_yaml_header(file_path):
                     pass
 
             if key == "tags":
-                if isinstance(parsed_value, list):
-                    parsed_value = ", ".join(str(tag) for tag in parsed_value)
-                elif (
-                    isinstance(parsed_value, str)
-                    and parsed_value.startswith("[")
-                    and parsed_value.endswith("]")
-                ):
-                    parsed_value = parsed_value[1:-1].strip()
+                parsed_value = normalize_tags(parsed_value)
 
             metadata[key] = parsed_value
 
-    return metadata
+    if not header_closed:
+        raise NoteFormatError(f"{file_path.name}: YAML header is never closed")
 
+    return metadata
 
 def edit_note(note_path):
     """Open the selected note in the user's text editor."""
@@ -173,10 +176,18 @@ def search_notes(notes_dir, query):
         try:
             metadata = parse_yaml_header(note_file)
             content = note_file.read_text(encoding="utf-8")
-        except (OSError, UnicodeError):
+        except NOTE_READ_ERRORS:
             continue
 
-        metadata_text = " ".join(str(value) for value in metadata.values())
+        parts = []
+
+        for value in metadata.values():
+            if isinstance(value, list):
+                parts.extend(str(item) for item in value)
+            else:
+                parts.append(str(value))
+
+        metadata_text = " ".join(parts)
 
         if query in metadata_text.casefold() or query in content.casefold():
             matches.append(note_file)
@@ -223,9 +234,10 @@ def format_note_line(note_path):
     metadata = parse_yaml_header(note_path)
     title = metadata.get("title", note_path.name)
     created = metadata.get("created", "unknown date")
-    tags = metadata.get("tags", "no tags")
-
-    return f"{title} — {created} — Tags: {tags}"
+    tags = metadata.get("tags", [])
+    tags_text = ", ".join(tags) if tags else "no tags"
+    ...
+    return f"{title} — {created} — Tags: {tags_text}"
 
 def list_notes(notes_dir):
     """List note files and their titles."""
@@ -240,7 +252,7 @@ def list_notes(notes_dir):
     for number, note_file in enumerate(note_files, start=1):
         try:
             line = format_note_line(note_file)
-        except (OSError, UnicodeError) as error:
+        except NOTE_READ_ERRORS as error:
             line = f"{note_file.name} — unreadable: {error}"
             had_errors = True
 
@@ -267,7 +279,7 @@ def display_note(note_file, title):
     """Display a note's title and body."""
     try:
         content = read_note_body(note_file)
-    except (OSError, UnicodeError) as error:
+    except NOTE_READ_ERRORS as error:
         print(f"Could not display '{note_file.name}': {error}")
         return
 
@@ -295,6 +307,18 @@ def show_help():
     ### Plain UTF-8 Markdown in a folder you own.
     """
     print(help_text)
+
+def normalize_tags(value):
+    """Return tags as a list of strings, whatever form they arrived in."""
+    if isinstance(value, list):
+        return [str(tag).strip() for tag in value if str(tag).strip()]
+
+    text = str(value).strip()
+
+    if text.startswith("[") and text.endswith("]"):
+        text = text[1:-1]
+
+    return tags_from_input(text)
 
 def tags_from_input(tags):
     """Convert comma-separated tag input into a clean list of strings."""
@@ -356,7 +380,7 @@ def handle_list(notes_dir):
 
     try:
         selected_title = get_note_title(selected_file)
-    except (OSError, UnicodeError) as error:
+    except NOTE_READ_ERRORS as error:
         print(f"Could not open '{selected_file.name}': {error}")
         return
 
@@ -435,7 +459,7 @@ def handle_search(notes_dir):
     for number, note_file in enumerate(matches, start=1):
         try:
             line = format_note_line(note_file)
-        except (OSError, UnicodeError) as error:
+        except NOTE_READ_ERRORS as error:
             line = f"{note_file.name} — unreadable: {error}"
 
         print(f"{number}. {line}")
@@ -450,7 +474,7 @@ def handle_search(notes_dir):
 
     try:
         selected_title = get_note_title(selected_file)
-    except (OSError, UnicodeError) as error:
+    except NOTE_READ_ERRORS as error:
         print(f"Could not open '{selected_file.name}': {error}")
         return
 
@@ -473,7 +497,7 @@ def handle_delete(notes_dir):
 
     try:
         selected_title = get_note_title(selected_file)
-    except (OSError, UnicodeError) as error:
+    except NOTE_READ_ERRORS as error:
         print(f"Could not prepare '{selected_file.name}' for deletion: {error}")
         return
 
@@ -616,7 +640,7 @@ def main():
             for note_file in matches:
                 try:
                     print(format_note_line(note_file))
-                except (OSError, UnicodeError) as error:
+                except NOTE_READ_ERRORS as error:
                     print(f"Could not format '{note_file.name}': {error}", file=sys.stderr)
                     exit_code = 1
 
@@ -629,7 +653,7 @@ def main():
         else:
             try:
                 sys.stdout.write(read_note_body(selected_file))
-            except (OSError, UnicodeError) as error:
+            except NOTE_READ_ERRORS as error:
                 print(f"Could not read '{args.filename}': {error}", file=sys.stderr)
                 exit_code = 1
 

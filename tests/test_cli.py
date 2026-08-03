@@ -4,6 +4,17 @@ from pathlib import Path
 
 NOTEGOAT = Path(__file__).resolve().parent.parent / "python" / "notegoat.py"
 
+def test_list_survives_a_corrupt_note(notes_home):
+    notes = notes_home / "notes"
+    notes.mkdir(parents=True, exist_ok=True)
+    (notes / "broken.md").write_text("---\ntitle: Never Closed\n", encoding="utf-8")
+    (notes / "fine.md").write_text('---\ntitle: "Fine"\n---\n\nbody\n', encoding="utf-8")
+
+    result = run_cli("list")
+
+    assert "unreadable" in result.stdout
+    assert "Fine" in result.stdout
+    assert result.returncode == 1
 
 def run_cli(*args, stdin=""):
     """Run notegoat as a real subprocess.
